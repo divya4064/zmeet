@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Group Video Call</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/materialize.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.5/socket.io.js" integrity="sha512-2rUSTSAeOO02jF6eBqENNqPs1EohenJ5j+1dgDPdXSLz9nOlrr8DJk4zW/lDy8rjhGCSonW3Gx812XJQIKZKJQ==" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/css/style.css">
+
+
+</head>
+
+<body>
+    <div class="main-wrap">
+        <div class="call-wrap card" style="z-index: 99">
+            <a id='meetingid' href="#" style="color: black;"></a>
+            <div class="remote-video-wrap" id="remote-video" style="margin-bottom:0;background-color:rgb(131 131 131); display: flex;flex-wrap: wrap;">
+                <div>
+                   
+                    <div id="localUser" class="userbox remote-user div-center" style="flex-direction: column; height:100%;">
+                        <h5 class="div-center"><%=username%></h5>
+                        <div class="div-center">
+                            <video autoplay id="localStream" />
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <a href="/" class="waves-effect waves-light btn" style="margin: 10px;">Leave</a>
+
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="/js/materialize.min.js"></script>
+    <script src="/js/client.js"></script>
+    <script>
+         var rtpAudioSenders=[];
+         var rtpVideoSenders=[];
+         var socketUrl = "http://localhost:3000";
+         var username = "<%=username%>";
+         var meeting_id = "<%=meeting_id%>";
+         var localUserVideo;
+         var remoteStream = [];
+         var audioStream = [];
+
+         var audioTrack;
+         var mediaTrack;
+         var users_connection = [];
+         var users_connectionID= [];
+
+
+         var sdpFunction;
+          
+         sdpFunction = (data, to_connid) =>{
+            socket.emit('sdpProcess', {
+                message: data,
+                to_connid: to_connid
+            });
+         }
+
+         var socket=io.connect(socketUrl);
+         
+         socket.on("connect", () => {
+            if(socket.connected){
+                socket.emit("users_info_to_signaling_server", {
+                    current_user_name: username,
+                    meeting_id: meeting_id
+                })
+            }
+            localConnectionID=socket.id;
+            localUserVideo=document.getElementById("localStream");
+            processMedia();
+         });
+         
+         socket.on('newConnectionInformation', function(other_users){
+            $('#remote-video .other').remove();
+            
+            for(let i=0; i<other_users.length; i++){
+                addUser(other_users[i].user_id,other_users[i].connectionId);
+                createConnection(other_users[i].connectionId);
+            }
+         })
+      
+        socket.on('other_users_to_inform' ,function(data){
+            console.log("other_users_to_inform",data);
+            addUser(data.other_user_id,data.connId);
+            createConnection(data.connId);
+        }) 
+
+        function addUser(other_username, connId){
+          //  console.log("addUser",other_username, connId);
+            $('#remote-video').append(`
+             <div id=" `+connId+`" class="remote-user other div-center-column">
+               <h5 class="div-center">`+other_username+`</h5>
+               <div class= "div-center">
+                  <video autoplay id= "video_`+connId+`"></video>
+                  <audio autoplay id= "audio_`+connId+`" />
+
+                </div>
+
+             </div>   
+            `);
+        }
+
+       function updateMediaSenders(track, rtpSenders){
+         for(var con_id in users_connection){
+            var connections=users_connection[con_id];
+            if(connections && (connections.connectionState=="new" ||
+               connections.connectionState=="connected" || 
+               connections.connectionState=="connecting" )){
+               
+                if(rtpSenders[con_id] && rtpSenders[con_id].track){
+                    rtpSenders[con_id].replaceTrack(track);
+            } else{
+                 rtpSenders[con_id] = users_connection[con_id].addTrack(track); 
+            }
+         }
+        }
+    }
+       var iceConfig = {
+              iceServers: [
+               // {urls: ' stun:stun.l.google.com:19302'},
+                {urls: 'stun:freestun.net:3478'},
+{urls: 'stun:iphone-stun.strato-iphone.de:3478'},
+{urls: 'stun:relay.webwormhole.io:3478'},
+{urls: 'stun:stun-01.schulen-fulda.de:3478'},
+{urls: 'stun:stun-02.schulen-fulda.de:3478'},
+{urls: 'stun:stun-03.schulen-fulda.de:3478'},
+{urls: 'stun:stun-1.server.yesing.com:3478'},
+{urls: 'stun:stun-2nd.relaix.net:3478'},
+{urls: 'stun:stun-a01.isp.t-ipnet.de:3478'},
+{urls: 'stun:stun-americas-01.s73cloud.com:3478'},
+{urls: 'stun:stun-americas-02.s73cloud.com:3478'},
+{urls: 'stun:stun-azure.47billion.com:3478'},
+{urls: 'stun:stun-b1.qq.com:3478'},
+{urls: 'stun:stun-de.files.fm:3478'},
+{urls: 'stun:stun-dev.gozeppelin.com:3478'},
+{urls: 'stun:stun-map01.vsee.com:3478'},
+{urls: 'stun:stun-map02.vsee.com:3478'},
+{urls: 'stun:stun-neu.levigo.net:3478'},
+{urls: 'stun:stun-one.mabe.at:3478'},
+{urls: 'stun:stun-pbx.wsinfo.fr:3478'},
+{urls: 'stun:stun-priv-01-cloud.bph.de:3478'},
+{urls: 'stun:stun-rpl.de.rhenus.com:3478'},
+{urls: 'stun:stun-staging.videovisit.io:3478'},
+{urls: 'stun:stun-test.sip5060.net:3478'},
+{urls: 'stun:stun-turn.4realstudio.com:3478'},
+{urls: 'stun:stun-turn.alta.neopath.com.br:3478'},
+{urls: 'stun:stun-turn.conferencing.swisscom.ch:3478'},
+{urls: 'stun:stun-turn.demo.ikonixtechnology.com.au:3478'},
+{urls: 'stun:stun-turn.dev.conferencing.swisscom.ch:3478'},
+{urls: 'stun:stun-turn.federowicz.de:3478'},
+{urls: 'stun:stun-turn.int.conferencing.swisscom.ch:3478'},
+{urls: 'stun:stun-v2.mdtalk.io:3478'},
+{urls: 'stun:stun.0xr00tc0d3.com:3478'},
+{urls: 'stun:stun.1-voip.com:3478'},
+{urls: 'stun:stun.12connect.com:3478'},
+{urls: 'stun:stun.12voip.com:3478'},
+{urls: 'stun:stun.1und1.de:3478'},
+{urls: 'stun:stun.2sfs.com:3478'},
+{urls: 'stun:stun.2stepfileshare.com:3478'},
+{urls: 'stun:stun.3deluxe.de:3478'},
+{urls: 'stun:stun.3wayint.com:3478'},
+{urls: 'stun:stun.5222.de:3478'},
+{urls: 'stun:stun.5sn.com:3478'},
+{urls: 'stun:stun.6clones.net:3478'},
+{urls: 'stun:stun.aa.net.uk:3478'},
+{urls: 'stun:stun.aaisp.co.uk:3478'},
+{urls: 'stun:stun.abikus.pl:3478'},
+{urls: 'stun:stun.abracontrols.com:3478'},
+{urls: 'stun:stun.acquageraci.it:3478'},
+{urls: 'stun:stun.acrobits.cz:3478'},
+{urls: 'stun:stun.acronis.com:3478'},
+{urls: 'stun:stun.actionvoip.com:3478'},
+{urls: 'stun:stun.admira.com:3478'},
+{urls: 'stun:stun.adorsaz.ch:3478'},
+{urls: 'stun:stun.advantic.de:3478'},
+{urls: 'stun:stun.aggerverband.net:3478'},
+{urls: 'stun:stun.agya.info:3478'},
+{urls: 'stun:stun.alabasta.net:3478'},
+{urls: 'stun:stun.alberon.cz:3478'},
+{urls: 'stun:stun.allflac.com:3478'},
+{urls: 'stun:stun.alphacron.de:3478'},
+{urls: 'stun:stun.alpirsbacher.de:3478'},
+{urls: 'stun:stun.anlx.net:3478'},
+{urls: 'stun:stun.annatel.net:3478'},
+{urls: 'stun:stun.anonym.im:3478'},
+{urls: 'stun:stun.antisip.com:3478'},
+{urls: 'stun:stun.anura.io:3478'},
+{urls: 'stun:stun.ariso.ch:3478'},
+{urls: 'stun:stun.arkh-edu.ru:3478'},
+{urls: 'stun:stun.astatu.berlin:3478'},
+{urls: 'stun:stun.astimax.de:3478'},
+{urls: 'stun:stun.atagverwarming.nl:3478'},
+{urls: 'stun:stun.atlas-stiftung.ch:3478'},
+{urls: 'stun:stun.atnd.de:3478'},
+{urls: 'stun:stun.atomicparticles.eu:3478'},
+{urls: 'stun:stun.ausproof.com.au:3478'},
+{urls: 'stun:stun.autosystem.com:3478'},
+{urls: 'stun:stun.avigora.fr:3478'},
+{urls: 'stun:stun.avmeets.com:3478'},
+{urls: 'stun:stun.avoxi.com:3478'},
+{urls: 'stun:stun.awassif.eu:3478'},
+{urls: 'stun:stun.axeos.nl:3478'},
+{urls: 'stun:stun.axialys.net:3478'},
+{urls: 'stun:stun.b-tel.ir:3478'},
+{urls: 'stun:stun.babelforce.com:3478'},
+{urls: 'stun:stun.baltmannsweiler.de:3478'},
+{urls: 'stun:stun.bandmate.international:3478'},
+{urls: 'stun:stun.bandyer.com:3478'},
+{urls: 'stun:stun.bankai.de:3478'},
+{urls: 'stun:stun.bbb.vikosoz.de:3478'},
+{urls: 'stun:stun.bbb4all.de:3478'},
+{urls: 'stun:stun.bbnldevices.in:3478'},
+{urls: 'stun:stun.bbs1emden.org:3478'},
+{urls: 'stun:stun.bcs2005.net:3478'},
+{urls: 'stun:stun.beam.software:3478'},
+{urls: 'stun:stun.bearstech.com:3478'},
+{urls: 'stun:stun.belowtoxic.cloud:3478'},
+{urls: 'stun:stun.bergophor.de:3478'},
+{urls: 'stun:stun.bernardoprovenzano.net:3478'},
+{urls: 'stun:stun.bestvoipreselling.com:3478'},
+{urls: 'stun:stun.bethesda.net:3478'},
+{urls: 'stun:stun.betta-security.de:3478'},
+{urls: 'stun:stun.bettfu.com:3478'},
+{urls: 'stun:stun.beuth-hochschule.de:3478'},
+{urls: 'stun:stun.bht-berlin.de:3478'},
+{urls: 'stun:stun.bisin.de:3478'},
+{urls: 'stun:stun.bitburger.de:3478'},
+{urls: 'stun:stun.bluesip.net:3478'},
+{urls: 'stun:stun.bmt.services:3478'},
+{urls: 'stun:stun.bnc.net:3478'},
+{urls: 'stun:stun.bnsth.com:3478'},
+{urls: 'stun:stun.bobhelland.space:3478'},
+{urls: 'stun:stun.boketto.dev:3478'},
+{urls: 'stun:stun.bomgar.com:3478'},
+{urls: 'stun:stun.boulgour.com:3478'},
+{urls: 'stun:stun.brazdim.net:3478'},
+{urls: 'stun:stun.bridesbay.com:3478'},
+{urls: 'stun:stun.brighterwave.com:3478'},
+{urls: 'stun:stun.broadtube.xyz:3478'},
+{urls: 'stun:stun.brodowski.org:3478'},
+{urls: 'stun:stun.bsrueti.ch:3478'},
+{urls: 'stun:stun.buechertraeume.de:3478'},
+{urls: 'stun:stun.c10r.facebook.com:3478'},
+{urls: 'stun:stun.cablenet-as.net:3478'},
+{urls: 'stun:stun.caderize.com:3478'},
+{urls: 'stun:stun.call.fr1.hotelservices.online:3478'},
+{urls: 'stun:stun.call.netplanet.at:3478'},
+{urls: 'stun:stun.callromania.ro:3478'},
+{urls: 'stun:stun.carlovizzini.it:3478'},
+{urls: 'stun:stun.ccc-ffm.de:3478'},
+{urls: 'stun:stun.cchgeu.ru:3478'},
+{urls: 'stun:stun.cdn-net.com:3478'},
+{urls: 'stun:stun.cdnbye.com:3478'},
+{urls: 'stun:stun.celering.io:3478'},
+{urls: 'stun:stun.cellmail.com:3478'},
+{urls: 'stun:stun.cenexxx.cl:3478'},
+{urls: 'stun:stun.chaostreffbern.ch:3478'},
+{urls: 'stun:stun.chaotikum.org:3478'},
+{urls: 'stun:stun.chat.bilibili.com:3478'},
+{urls: 'stun:stun.chat.mensa.de:3478'},
+{urls: 'stun:stun.chat.moh.gov.my:3478'},
+{urls: 'stun:stun.chat.wegmeyer.io:3478'},
+{urls: 'stun:stun.chatous.com:3478'},
+{urls: 'stun:stun.cheapvoip.com:3478'},
+{urls: 'stun:stun.cibercloud.com.br:3478'},
+{urls: 'stun:stun.circl.lu:3478'},
+{urls: 'stun:stun.clickphone.ro:3478'},
+{urls: 'stun:stun.cloud-ed.fr:3478'},
+{urls: 'stun:stun.cloud.trizwo.it:3478'},
+{urls: 'stun:stun.cnict.org:3478'},
+{urls: 'stun:stun.cnsconnect.nl:3478'},
+{urls: 'stun:stun.codepiraten.com:3478'},
+{urls: 'stun:stun.collabora-test.tim.it:3478'},
+{urls: 'stun:stun.commandnotfound.org:3478'},
+{urls: 'stun:stun.commpeak.com:3478'},
+{urls: 'stun:stun.comrex.com:3478'},
+{urls: 'stun:stun.conactive.de:3478'},
+{urls: 'stun:stun.coniservice.de:3478'},
+{urls: 'stun:stun.connecteddata.com:3478'},
+{urls: 'stun:stun.connectlife.it:3478'},
+{urls: 'stun:stun.consistec.de:3478'},
+{urls: 'stun:stun.contipso.com:3478'},
+{urls: 'stun:stun.coolmeet.co:3478'},
+{urls: 'stun:stun.cope.es:3478'},
+{urls: 'stun:stun.core.mytelnet.co.za:3478'},
+{urls: 'stun:stun.counterpath.com:3478'},
+{urls: 'stun:stun.counterpath.net:3478'},
+{urls: 'stun:stun.countryparksas.com:3478'},
+{urls: 'stun:stun.cozact.com:3478'},
+{urls: 'stun:stun.crazycall.com:3478'},
+{urls: 'stun:stun.crimeastar.net:3478'},
+{urls: 'stun:stun.csw2020.com.pl:3478'},
+{urls: 'stun:stun.ctafauni.it:3478'},
+{urls: 'stun:stun.d.lege.de:3478'},
+{urls: 'stun:stun.datajob.de:3478'},
+{urls: 'stun:stun.dataverse.de:3478'},
+{urls: 'stun:stun.datenschutz-experten.nrw:3478'},
+{urls: 'stun:stun.dcalling.de:3478'},
+{urls: 'stun:stun.dcentralisedmedia.com:3478'},
+{urls: 'stun:stun.ddns.net:3478'},
+{urls: 'stun:stun.deanone.nl:3478'},
+{urls: 'stun:stun.deepfinesse.com:3478'},
+{urls: 'stun:stun.defigohome.com:3478'},
+{urls: 'stun:stun.der-fetzer.de:3478'},
+{urls: 'stun:stun.deteque.com:3478'},
+{urls: 'stun:stun.dgt.lv:3478'},
+{urls: 'stun:stun.diallog.com:3478'},
+{urls: 'stun:stun.dice.tel:3478'},
+{urls: 'stun:stun.digitale-reparaturfabrik.com:3478'},
+{urls: 'stun:stun.dint.wroc.pl:3478'},
+{urls: 'stun:stun.dls.net:3478'},
+{urls: 'stun:stun.doctivi.com:3478'},
+{urls: 'stun:stun.doctoranywhere.mdit.gr:3478'},
+{urls: 'stun:stun.domostroitelnaya.com:3478'},
+{urls: 'stun:stun.drogoin.net:3478'},
+{urls: 'stun:stun.drvfst.de:3478'},
+{urls: 'stun:stun.dukun.de:3478'},
+{urls: 'stun:stun.dunyatelekom.com:3478'},
+{urls: 'stun:stun.dus.net:3478'},
+{urls: 'stun:stun.e-me.edu.gr:3478'},
+{urls: 'stun:stun.e.voiceinthecloud.io:3478'},
+{urls: 'stun:stun.easi.live:3478'},
+{urls: 'stun:stun.easter-eggs.com:3478'},
+{urls: 'stun:stun.easycallcloud.com:3478'},
+{urls: 'stun:stun.easytelecom.se:3478'},
+{urls: 'stun:stun.easyvoip.com:3478'},
+{urls: 'stun:stun.ecs-la.com:3478'},
+{urls: 'stun:stun.edumil.ru:3478'},
+{urls: 'stun:stun.edvgarbe.de:3478'},
+{urls: 'stun:stun.edwin-wiegele.at:3478'},
+{urls: 'stun:stun.eeza.csic.es:3478'},
+{urls: 'stun:stun.einfachcallback.de:3478'},
+{urls: 'stun:stun.ekiga.net:3478'},
+{urls: 'stun:stun.eleusi.com:3478'},
+{urls: 'stun:stun.elevate.at:3478'},
+{urls: 'stun:stun.elitetele.com:3478'},
+{urls: 'stun:stun.engineeredarts.co.uk:3478'},
+{urls: 'stun:stun.enjoi-live.com:3478'},
+{urls: 'stun:stun.entanglemessenger.org:3478'},
+{urls: 'stun:stun.enthalpy.mx:3478'},
+{urls: 'stun:stun.eol.co.nz:3478'},
+{urls: 'stun:stun.eoni.com:3478'},
+{urls: 'stun:stun.epic-bytes.net:3478'},
+{urls: 'stun:stun.epygi.com:3478'},
+{urls: 'stun:stun.erl.de:3478'},
+{urls: 'stun:stun.erre-elle.net:3478'},
+{urls: 'stun:stun.esprechstunde.net:3478'},
+{urls: 'stun:stun.eta-energieberatung.de:3478'},
+{urls: 'stun:stun.eurosys.be:3478'},
+{urls: 'stun:stun.evgcdn.net:3478'},
+{urls: 'stun:stun.exirius.de:3478'},
+{urls: 'stun:stun.eyesoft.fr:3478'},
+{urls: 'stun:stun.f.haeder.net:3478'},
+{urls: 'stun:stun.factorify.cz:3478'},
+{urls: 'stun:stun.factoryaccess.cloud:3478'},
+{urls: 'stun:stun.fairytel.at:3478'},
+{urls: 'stun:stun.fakopats.de:3478'},
+{urls: 'stun:stun.fathomvoice.com:3478'},
+{urls: 'stun:stun.fba.accountants:3478'},
+{urls: 'stun:stun.fbsbx.com:3478'},
+{urls: 'stun:stun.fc-net.work:3478'},
+{urls: 'stun:stun.files.fm:3478'},
+{urls: 'stun:stun.filmplay.live:3478'},
+{urls: 'stun:stun.finanz-forum.biz:3478'},
+{urls: 'stun:stun.fitauto.ru:3478'},
+{urls: 'stun:stun.fixup.net:3478'},
+{urls: 'stun:stun.fk4.hs-bremen.de:3478'},
+{urls: 'stun:stun.fmo.de:3478'},
+{urls: 'stun:stun.foad.me.uk:3478'},
+{urls: 'stun:stun.folia.de:3478'},
+{urls: 'stun:stun.fon.is:3478'},
+{urls: 'stun:stun.foncloud.net:3478'},
+{urls: 'stun:stun.foxq.org:3478'},
+{urls: 'stun:stun.framasoft.org:3478'},
+{urls: 'stun:stun.freecall.com:3478'},
+{urls: 'stun:stun.freeswitch.org:3478'},
+{urls: 'stun:stun.freevoipdeal.com:3478'},
+{urls: 'stun:stun.freewind.fr:3478'},
+{urls: 'stun:stun.frozenmountain.com:3478'},
+{urls: 'stun:stun.fundamentally.eu:3478'},
+{urls: 'stun:stun.futurasp.es:3478'},
+{urls: 'stun:stun.gadgeteers.net:3478'},
+{urls: 'stun:stun.galeriemagnet.at:3478'},
+{urls: 'stun:stun.gazl.co:3478'},
+{urls: 'stun:stun.gbmtrade.it:3478'},
+{urls: 'stun:stun.gbtel.ca:3478'},
+{urls: 'stun:stun.gebben.org:3478'},
+{urls: 'stun:stun.gectsolutions.com:3478'},
+{urls: 'stun:stun.geesthacht.de:3478'},
+{urls: 'stun:stun.gehrmann.vip:3478'},
+{urls: 'stun:stun.genymotion.com:3478'},
+{urls: 'stun:stun.geonet.ro:3478'},
+{urls: 'stun:stun.gigaset.net:3478'},
+{urls: 'stun:stun.gimeco.it:3478'},
+{urls: 'stun:stun.globenet.org:3478'},
+{urls: 'stun:stun.gmx.de:3478'},
+{urls: 'stun:stun.gmx.net:3478'},
+{urls: 'stun:stun.gntel.nl:3478'},
+{urls: 'stun:stun.godatenow.com:3478'},
+{urls: 'stun:stun.goldfish.ie:3478'},
+{urls: 'stun:stun.gonicus.de:3478'},
+{urls: 'stun:stun.gooodcare.com:3478'},
+{urls: 'stun:stun.gr-research.it:3478'},
+{urls: 'stun:stun.graftlab.com:3478'},
+{urls: 'stun:stun.gravitel.ru:3478'},
+{urls: 'stun:stun.grazertrinkwasseringefahr.at:3478'},
+{urls: 'stun:stun.greedy-it.de:3478'},
+{urls: 'stun:stun.groenewold-newmedia.de:3478'},
+{urls: 'stun:stun.grunet.de:3478'},
+{urls: 'stun:stun.gtov.net:3478'},
+{urls: 'stun:stun.gveh.de:3478'},
+{urls: 'stun:stun.h4v.eu:3478'},
+{urls: 'stun:stun.hacklab.fi:3478'},
+{urls: 'stun:stun.halloapp.dev:3478'},
+{urls: 'stun:stun.halonet.pl:3478'},
+{urls: 'stun:stun.hank.co.in:3478'},
+{urls: 'stun:stun.healapp.net:3478'},
+{urls: 'stun:stun.healthtap.com:3478'},
+{urls: 'stun:stun.heeds.eu:3478'},
+{urls: 'stun:stun.heldenvz.de:3478'},
+{urls: 'stun:stun.herweck.de:3478'},
+{urls: 'stun:stun.hfg-karlsruhe.de:3478'},
+{urls: 'stun:stun.hialabs.com:3478'},
+{urls: 'stun:stun.hicare.net:3478'},
+{urls: 'stun:stun.hide.me:3478'},
+{urls: 'stun:stun.hitv.com:3478'},
+{urls: 'stun:stun.hivestreaming.com:3478'},
+{urls: 'stun:stun.hivestreaming.trafficmanager.net:3478'},
+{urls: 'stun:stun.hkbeecloudsystem.com:3478'},
+{urls: 'stun:stun.hm.edu:3478'},
+{urls: 'stun:stun.hoiio.com:3478'},
+{urls: 'stun:stun.holocom.cloud:3478'},
+{urls: 'stun:stun.honeycall.com:3478'},
+{urls: 'stun:stun.hoolva.com:3478'},
+{urls: 'stun:stun.hopsync.org:3478'},
+{urls: 'stun:stun.hot-chilli.net:3478'},
+{urls: 'stun:stun.hubnetweb.org:3478'},
+{urls: 'stun:stun.ibi.multiq.com:3478'},
+{urls: 'stun:stun.ice.sandbox.lonesec.com:3478'},
+{urls: 'stun:stun.ictp.it:3478'},
+{urls: 'stun:stun.icuconnect.eu:3478'},
+{urls: 'stun:stun.ied.sma.de:3478'},
+{urls: 'stun:stun.ifon.pl:3478'},
+{urls: 'stun:stun.ignion.net:3478'},
+{urls: 'stun:stun.iiitkottayam.ac.in:3478'},
+{urls: 'stun:stun.ilam.ac.ir:3478'},
+{urls: 'stun:stun.ilya.ws:3478'},
+{urls: 'stun:stun.imafex.sk:3478'},
+{urls: 'stun:stun.imeeting.com.br:3478'},
+{urls: 'stun:stun.imp.ch:3478'},
+{urls: 'stun:stun.impactpbx.com:3478'},
+{urls: 'stun:stun.indisoft.de:3478'},
+{urls: 'stun:stun.indycall.com:3478'},
+{urls: 'stun:stun.infra.net:3478'},
+{urls: 'stun:stun.insemex.ro:3478'},
+{urls: 'stun:stun.insoftusa.com:3478'},
+{urls: 'stun:stun.internetcalls.com:3478'},
+{urls: 'stun:stun.intervoip.com:3478'},
+{urls: 'stun:stun.intwizja.pl:3478'},
+{urls: 'stun:stun.inubo.ch:3478'},
+{urls: 'stun:stun.invictech.ch:3478'},
+{urls: 'stun:stun.inyar.ru:3478'},
+{urls: 'stun:stun.iointegrators.com:3478'},
+{urls: 'stun:stun.ionewu.com:3478'},
+{urls: 'stun:stun.iossol.de:3478'},
+{urls: 'stun:stun.iotalk.ir:3478'},
+{urls: 'stun:stun.ipcom.ch:3478'},
+{urls: 'stun:stun.ipeex.de:3478'},
+{urls: 'stun:stun.ipfsbit.com:3478'},
+{urls: 'stun:stun.ippi.com:3478'},
+{urls: 'stun:stun.ippi.fr:3478'},
+{urls: 'stun:stun.ipshka.com:3478'},
+{urls: 'stun:stun.ipv8.pl:3478'},
+{urls: 'stun:stun.iqvoice.com:3478'},
+{urls: 'stun:stun.irishvoip.com:3478'},
+{urls: 'stun:stun.iserv.eu:3478'},
+{urls: 'stun:stun.isp.net.au:3478'},
+{urls: 'stun:stun.isstar.net:3478'},
+{urls: 'stun:stun.istitutogramscisiciliano.it:3478'},
+{urls: 'stun:stun.it1.hr:3478'},
+{urls: 'stun:stun.iut.ac.ir:3478'},
+{urls: 'stun:stun.ixc.ua:3478'},
+{urls: 'stun:stun.jabber.dk:3478'},
+{urls: 'stun:stun.jabbim.cz:3478'},
+{urls: 'stun:stun.jay.net:3478'},
+{urls: 'stun:stun.jensbouma.com:3478'},
+{urls: 'stun:stun.jerichosystems.co.za:3478'},
+{urls: 'stun:stun.jmrobotics.no:3478'},
+{urls: 'stun:stun.johanhelsing.studio:3478'},
+{urls: 'stun:stun.jowisoftware.de:3478'},
+{urls: 'stun:stun.jrnetservices.de:3478'},
+{urls: 'stun:stun.jukno.de:3478'},
+{urls: 'stun:stun.jumblo.com:3478'},
+{urls: 'stun:stun.jump-up.to:3478'},
+{urls: 'stun:stun.junet.se:3478'},
+{urls: 'stun:stun.justvoip.com:3478'},
+{urls: 'stun:stun.k8s.xpertyme.com:3478'},
+{urls: 'stun:stun.kalis.cc:3478'},
+{urls: 'stun:stun.kanne.ggeg.eu:3478'},
+{urls: 'stun:stun.kanojo.de:3478'},
+{urls: 'stun:stun.kaseya.com:3478'},
+{urls: 'stun:stun.kc.com.pl:3478'},
+{urls: 'stun:stun.kedr.io:3478'},
+{urls: 'stun:stun.kempen.xyz:3478'},
+{urls: 'stun:stun.kenkon.net:3478'},
+{urls: 'stun:stun.kleen.ch:3478'},
+{urls: 'stun:stun.kleusberg.de:3478'},
+{urls: 'stun:stun.kmsihosting.com:3478'},
+{urls: 'stun:stun.kohrn-online.de:3478'},
+{urls: 'stun:stun.komsa.de:3478'},
+{urls: 'stun:stun.komunikas.net:3478'},
+{urls: 'stun:stun.kotter.net:3478'},
+{urls: 'stun:stun.kpi.ua:3478'},
+{urls: 'stun:stun.krypto.casa:3478'},
+{urls: 'stun:stun.kserver.org:3478'},
+{urls: 'stun:stun.kuva-dev.eticlab.xyz:3478'},
+{urls: 'stun:stun.l.google.com:19302'},
+{urls: 'stun:stun.l.google.com:19305'},
+{urls: 'stun:stun.l.google.com:3478'},
+{urls: 'stun:stun.labs.net:3478'},
+{urls: 'stun:stun.ladridiricette.it:3478'},
+{urls: 'stun:stun.landshut.org:3478'},
+{urls: 'stun:stun.landvast.nl:3478'},
+{urls: 'stun:stun.lebendigefluesse.at:3478'},
+{urls: 'stun:stun.lege.de:3478'},
+{urls: 'stun:stun.lender.schule:3478'},
+{urls: 'stun:stun.leonde.org:3478'},
+{urls: 'stun:stun.leucotron.com.br:3478'},
+{urls: 'stun:stun.levigo.de:3478'},
+{urls: 'stun:stun.levigo.net:3478'},
+{urls: 'stun:stun.lgde.de:3478'},
+{urls: 'stun:stun.likenuuk.com:3478'},
+{urls: 'stun:stun.lineaencasa.com:3478'},
+{urls: 'stun:stun.linphone.org:3478'},
+{urls: 'stun:stun.linss.com:3478'},
+{urls: 'stun:stun.linuxtrent.it:3478'},
+{urls: 'stun:stun.lirmm.fr:3478'},
+{urls: 'stun:stun.live2u.com.br:3478'},
+{urls: 'stun:stun.liveo.fr:3478'},
+{urls: 'stun:stun.lleida.net:3478'},
+{urls: 'stun:stun.localphone.com:3478'},
+{urls: 'stun:stun.logic.ky:3478'},
+{urls: 'stun:stun.londonweb.net:3478'},
+{urls: 'stun:stun.lovense.com:3478'},
+{urls: 'stun:stun.lowratevoip.com:3478'},
+{urls: 'stun:stun.lrhmv.de:3478'},
+{urls: 'stun:stun.lu-cix.lu:3478'},
+{urls: 'stun:stun.luger.de:3478'},
+{urls: 'stun:stun.luhr.net:3478'},
+{urls: 'stun:stun.luzzato.com:3478'},
+{urls: 'stun:stun.lysergic.dev:3478'},
+{urls: 'stun:stun.m-online.net:3478'},
+{urls: 'stun:stun.madavi.de:3478'},
+{urls: 'stun:stun.magicum.net:3478'},
+{urls: 'stun:stun.maitri.club:3478'},
+{urls: 'stun:stun.marcelproust.it:3478'},
+{urls: 'stun:stun.marko-jovanovic.de:3478'},
+{urls: 'stun:stun.mazewebsolutions.ch:3478'},
+{urls: 'stun:stun.mconf.rnp.br:3478'},
+{urls: 'stun:stun.mcra.fr:3478'},
+{urls: 'stun:stun.mdcc.de:3478'},
+{urls: 'stun:stun.mechanicalowl.de:3478'},
+{urls: 'stun:stun.med.uni-greifswald.de:3478'},
+{urls: 'stun:stun.mediani.de:3478'},
+{urls: 'stun:stun.medvc.eu:3478'},
+{urls: 'stun:stun.meetwife.com:3478'},
+{urls: 'stun:stun.megatel.si:3478'},
+{urls: 'stun:stun.meowsbox.com:3478'},
+{urls: 'stun:stun.metra-services.de:3478'},
+{urls: 'stun:stun.microdata.co.uk:3478'},
+{urls: 'stun:stun.microdata.systems:3478'},
+{urls: 'stun:stun.mikuru.de:3478'},
+{urls: 'stun:stun.mit.de:3478'},
+{urls: 'stun:stun.miwifi.com:3478'},
+{urls: 'stun:stun.mixvoip.com:3478'},
+{urls: 'stun:stun.mobile-italia.com:3478'},
+{urls: 'stun:stun.modul-berlin.de:3478'},
+{urls: 'stun:stun.moonlight-stream.org:3478'},
+{urls: 'stun:stun.morgan-systems.com:3478'},
+{urls: 'stun:stun.mtx.prudent.io:3478'},
+{urls: 'stun:stun.muho-mannheim.de:3478'},
+{urls: 'stun:stun.muoversi.net:3478'},
+{urls: 'stun:stun.myhowto.org:3478'},
+{urls: 'stun:stun.myspeciality.com:3478'},
+{urls: 'stun:stun.myvoipapp.com:3478'},
+{urls: 'stun:stun.myvoiptraffic.com:3478'},
+{urls: 'stun:stun.mywatson.it:3478'},
+{urls: 'stun:stun.nagoonline.com:3478'},
+{urls: 'stun:stun.nanocosmos.de:3478'},
+{urls: 'stun:stun.ncic.com:3478'},
+{urls: 'stun:stun.nekkimobile.ru:3478'},
+{urls: 'stun:stun.neobridge.fr:3478'},
+{urls: 'stun:stun.neomedia.it:3478'},
+{urls: 'stun:stun.neowise.fr:3478'},
+{urls: 'stun:stun.netappel.com:3478'},
+{urls: 'stun:stun.netensia.net:3478'},
+{urls: 'stun:stun.netgsm.com.tr:3478'},
+{urls: 'stun:stun.nethack.ninja:3478'},
+{urls: 'stun:stun.netmaster.ro:3478'},
+{urls: 'stun:stun.netzbegruenung.de:3478'},
+{urls: 'stun:stun.neura.datamicron.com:3478'},
+{urls: 'stun:stun.newrocktech.com:3478'},
+{urls: 'stun:stun.nexalogy.com:3478'},
+{urls: 'stun:stun.nexphone.ch:3478'},
+{urls: 'stun:stun.next-gen.ro:3478'},
+{urls: 'stun:stun.next.nortelmed.com:3478'},
+{urls: 'stun:stun.nextcloud.com:3478'},
+{urls: 'stun:stun.nextcloud.com:443'},
+{urls: 'stun:stun.nexttell.ru:3478'},
+{urls: 'stun:stun.nexxtmobile.de:3478'},
+{urls: 'stun:stun.nfon.net:3478'},
+{urls: 'stun:stun.nicolai-wolff.de:3478'},
+{urls: 'stun:stun.nicoll.xyz:3478'},
+{urls: 'stun:stun.nimmerland.de:3478'},
+{urls: 'stun:stun.ninda.net:3478'},
+{urls: 'stun:stun.nonoh.net:3478'},
+{urls: 'stun:stun.noonan.family:3478'},
+{urls: 'stun:stun.nortelmed.com:3478'},
+{urls: 'stun:stun.nowe-tmg.de:3478'},
+{urls: 'stun:stun.odr.de:3478'},
+{urls: 'stun:stun.odsh.de:3478'},
+{urls: 'stun:stun.officinabit.com:3478'},
+{urls: 'stun:stun.oldhamtechnology.com:3478'},
+{urls: 'stun:stun.olimontel.it:3478'},
+{urls: 'stun:stun.oncloud7.ch:3478'},
+{urls: 'stun:stun.openjobs.hu:3478'},
+{urls: 'stun:stun.openmedia.gallery:3478'},
+{urls: 'stun:stun.openmusic.gallery:3478'},
+{urls: 'stun:stun.openvoip.it:3478'},
+{urls: 'stun:stun.optdyn.com:3478'},
+{urls: 'stun:stun.ora.pm:3478'},
+{urls: 'stun:stun.ortopediacoam.it:3478'},
+{urls: 'stun:stun.oss.social:3478'},
+{urls: 'stun:stun.otos.pl:3478'},
+{urls: 'stun:stun.p2p.blackberry.com:3478'},
+{urls: 'stun:stun.palava.tv:3478'},
+{urls: 'stun:stun.partell.nl:3478'},
+{urls: 'stun:stun.patentanimal.com:3478'},
+{urls: 'stun:stun.pbx.netcomnetz.de:3478'},
+{urls: 'stun:stun.pbx.scsynergy.net:3478'},
+{urls: 'stun:stun.peekvideochat.com:3478'},
+{urls: 'stun:stun.peeters.com:3478'},
+{urls: 'stun:stun.peethultra.be:3478'},
+{urls: 'stun:stun.petiak.ir:3478'},
+{urls: 'stun:stun.petzi-net.de:3478'},
+{urls: 'stun:stun.phoenixbell.online:3478'},
+{urls: 'stun:stun.phone.com:3478'},
+{urls: 'stun:stun.phx.freevoicepbx.com:3478'},
+{urls: 'stun:stun.physics.uoc.gr:3478'},
+{urls: 'stun:stun.piratenbrandenburg.de:3478'},
+{urls: 'stun:stun.pitow.live:3478'},
+{urls: 'stun:stun.pjsip.org:3478'},
+{urls: 'stun:stun.planetarium.com.br:3478'},
+{urls: 'stun:stun.plaxon.consulting:3478'},
+{urls: 'stun:stun.plexicomm.net:3478'},
+{urls: 'stun:stun.pocos.nl:3478'},
+{urls: 'stun:stun.poetamatusel.org:3478'},
+{urls: 'stun:stun.poivy.com:3478'},
+{urls: 'stun:stun.portal.hivetechnology.net:3478'},
+{urls: 'stun:stun.portalnetworks.ca:3478'},
+{urls: 'stun:stun.portfiftysixty.net:3478'},
+{urls: 'stun:stun.postblue.info:3478'},
+{urls: 'stun:stun.poul.org:3478'},
+{urls: 'stun:stun.powervoip.com:3478'},
+{urls: 'stun:stun.ppcsystem.online:3478'},
+{urls: 'stun:stun.ppdi.com:3478'},
+{urls: 'stun:stun.prestatel.fr:3478'},
+{urls: 'stun:stun.pricall.eu:3478'},
+{urls: 'stun:stun.prism.it:3478'},
+{urls: 'stun:stun.prometheanproduct.com:3478'},
+{urls: 'stun:stun.prov-2115.ovh:3478'},
+{urls: 'stun:stun.provelo.org:3478'},
+{urls: 'stun:stun.provtel.com:3478'},
+{urls: 'stun:stun.prozserin.org:3478'},
+{urls: 'stun:stun.psych.help:3478'},
+{urls: 'stun:stun.pure-ip.com:3478'},
+{urls: 'stun:stun.purtel.com:3478'},
+{urls: 'stun:stun.q-mex.net:3478'},
+{urls: 'stun:stun.qcol.net:3478'},
+{urls: 'stun:stun.qqlive.qq.com:3478'},
+{urls: 'stun:stun.quirum.com:3478'},
+{urls: 'stun:stun.radiojar.com:3478'},
+{urls: 'stun:stun.rasapp.ir:3478'},
+{urls: 'stun:stun.rcsxzx.com:3478'},
+{urls: 'stun:stun.reattendance.com:3478'},
+{urls: 'stun:stun.redbini.com:3478'},
+{urls: 'stun:stun.redmedical.de:3478'},
+{urls: 'stun:stun.redsquared.com:3478'},
+{urls: 'stun:stun.redworks.nl:3478'},
+{urls: 'stun:stun.relaix.net:3478'},
+{urls: 'stun:stun.remassis.com:3478'},
+{urls: 'stun:stun.remotepc.com:3478'},
+{urls: 'stun:stun.remotetopc.com:3478'},
+{urls: 'stun:stun.rescuetrack.com:3478'},
+{urls: 'stun:stun.rimkus.it:3478'},
+{urls: 'stun:stun.ringostat.com:3478'},
+{urls: 'stun:stun.rnp.br:3478'},
+{urls: 'stun:stun.robbuvoice.com:3478'},
+{urls: 'stun:stun.rockenstein.de:3478'},
+{urls: 'stun:stun.roct.de:3478'},
+{urls: 'stun:stun.rolmail.net:3478'},
+{urls: 'stun:stun.rolvoice.it:3478'},
+{urls: 'stun:stun.romaaeterna.nl:3478'},
+{urls: 'stun:stun.romancecompass.com:3478'},
+{urls: 'stun:stun.root-1.de:3478'},
+{urls: 'stun:stun.rtc.praxxys.ph:3478'},
+{urls: 'stun:stun.rtc.yandex.net:3478'},
+{urls: 'stun:stun.ru-brides.com:3478'},
+{urls: 'stun:stun.rxdbit.com:3478'},
+{urls: 'stun:stun.rynga.com:3478'},
+{urls: 'stun:stun.rz.htw-berlin.de:3478'},
+{urls: 'stun:stun.sacko.com.au:3478'},
+{urls: 'stun:stun.saman360.com:3478'},
+{urls: 'stun:stun.schlund.de:3478'},
+{urls: 'stun:stun.schmid-federn.ch:3478'},
+{urls: 'stun:stun.schoeffel.de:3478'},
+{urls: 'stun:stun.schulinformatik.at:3478'},
+{urls: 'stun:stun.scorecrm.pe:3478'},
+{urls: 'stun:stun.scriptonary.com:3478'},
+{urls: 'stun:stun.scuchers.com:3478'},
+{urls: 'stun:stun.scudcrm.com:3478'},
+{urls: 'stun:stun.seemoo.tu-darmstadt.de:3478'},
+{urls: 'stun:stun.selasky.org:3478'},
+{urls: 'stun:stun.sensor.community:3478'},
+{urls: 'stun:stun.serveil.com:3478'},
+{urls: 'stun:stun.server.uni-frankfurt.de:3478'},
+{urls: 'stun:stun.serverplantage.de:3478'},
+{urls: 'stun:stun.servileto.net:3478'},
+{urls: 'stun:stun.sewan.fr:3478'},
+{urls: 'stun:stun.shadrinsk.net:3478'},
+{urls: 'stun:stun.shared.bbmenterprise.com:3478'},
+{urls: 'stun:stun.shared.bbmenterprise.dyn.blackberry.net:3478'},
+{urls: 'stun:stun.shwechat.com:3478'},
+{urls: 'stun:stun.sice.com:3478'},
+{urls: 'stun:stun.sid.galaxie.family:3478'},
+{urls: 'stun:stun.siedle.com:3478'},
+{urls: 'stun:stun.sightline.se:3478'},
+{urls: 'stun:stun.sigmavoip.com:3478'},
+{urls: 'stun:stun.signalwire.com:3478'},
+{urls: 'stun:stun.signet.nl:3478'},
+{urls: 'stun:stun.simlar.org:3478'},
+{urls: 'stun:stun.simonbalzer.de:3478'},
+{urls: 'stun:stun.simulcast.eu:3478'},
+{urls: 'stun:stun.sip.us:3478'},
+{urls: 'stun:stun.sipdiscount.com:3478'},
+{urls: 'stun:stun.sipgate.net:10000'},
+{urls: 'stun:stun.sipgate.net:3478'},
+{urls: 'stun:stun.sipglobalphone.com:3478'},
+{urls: 'stun:stun.siplogin.de:3478'},
+{urls: 'stun:stun.sippeer.dk:3478'},
+{urls: 'stun:stun.sipthor.net:3478'},
+{urls: 'stun:stun.siptraffic.com:3478'},
+{urls: 'stun:stun.siptrunk.com:3478'},
+{urls: 'stun:stun.sipy.cz:3478'},
+{urls: 'stun:stun.skerric.com:3478'},
+{urls: 'stun:stun.sky.od.ua:3478'},
+{urls: 'stun:stun.skydrone.aero:3478'},
+{urls: 'stun:stun.sma.de:3478'},
+{urls: 'stun:stun.smartvoip.com:3478'},
+{urls: 'stun:stun.smsdiscount.com:3478'},
+{urls: 'stun:stun.smslisto.com:3478'},
+{urls: 'stun:stun.smvhost.in:3478'},
+{urls: 'stun:stun.soho66.co.uk:3478'},
+{urls: 'stun:stun.solcon.nl:3478'},
+{urls: 'stun:stun.solnet.ch:3478'},
+{urls: 'stun:stun.solomo.de:3478'},
+{urls: 'stun:stun.sonderformat.cloud:3478'},
+{urls: 'stun:stun.sonetel.com:3478'},
+{urls: 'stun:stun.sonetel.net:3478'},
+{urls: 'stun:stun.sparvoip.de:3478'},
+{urls: 'stun:stun.speakswitch.com:3478'},
+{urls: 'stun:stun.speibox.de:3478'},
+{urls: 'stun:stun.spidata.ch:3478'},
+{urls: 'stun:stun.splicecom.com:3478'},
+{urls: 'stun:stun.sproesser.net:3478'},
+{urls: 'stun:stun.srca.org.sa:3478'},
+{urls: 'stun:stun.srce.hr:3478'},
+{urls: 'stun:stun.ssh.thinkrosystem.com:3478'},
+{urls: 'stun:stun.stadtwerke-eutin.de:3478'},
+{urls: 'stun:stun.steambot.ch:3478'},
+{urls: 'stun:stun.steuerkanzlei-banse.de:3478'},
+{urls: 'stun:stun.stochastix.de:3478'},
+{urls: 'stun:stun.stomp.dynv6.net:3478'},
+{urls: 'stun:stun.stratusvideo.com:3478'},
+{urls: 'stun:stun.streamnow.ch:3478'},
+{urls: 'stun:stun.streamspace.ai:3478'},
+{urls: 'stun:stun.studio-link.de:3478'},
+{urls: 'stun:stun.studio71.it:3478'},
+{urls: 'stun:stun.stuffnet.sk:3478'},
+{urls: 'stun:stun.stura.uni-heidelberg.de:3478'},
+{urls: 'stun:stun.superiordigital7.com:3478'},
+{urls: 'stun:stun.swrag.de:3478'},
+{urls: 'stun:stun.sylaps.com:3478'},
+{urls: 'stun:stun.syncthing.net:3478'},
+{urls: 'stun:stun.synergiejobs.be:3478'},
+{urls: 'stun:stun.syrex.co.za:3478'},
+{urls: 'stun:stun.syscon.cloud:3478'},
+{urls: 'stun:stun.szbboys.com:3478'},
+{urls: 'stun:stun.szlovak.sk:3478'},
+{urls: 'stun:stun.t-online.de:3478'},
+{urls: 'stun:stun.talkho.com:3478'},
+{urls: 'stun:stun.taxi.tst.yandex.net:3478'},
+{urls: 'stun:stun.taxi.yandex.net:3478'},
+{urls: 'stun:stun.taxsee.com:3478'},
+{urls: 'stun:stun.teambox.fr:3478'},
+{urls: 'stun:stun.teamfon.com:3478'},
+{urls: 'stun:stun.teamfon.de:3478'},
+{urls: 'stun:stun.techlevel.org:3478'},
+{urls: 'stun:stun.technologpark.net:3478'},
+{urls: 'stun:stun.technosens.fr:3478'},
+{urls: 'stun:stun.tee.gr:3478'},
+{urls: 'stun:stun.tel.lu:3478'},
+{urls: 'stun:stun.tel.yandex.net:3478'},
+{urls: 'stun:stun.tel2.co.uk:3478'},
+{urls: 'stun:stun.telbo.com:3478'},
+{urls: 'stun:stun.teliax.com:3478'},
+{urls: 'stun:stun.telnyx.com:3478'},
+{urls: 'stun:stun.telviva.com:3478'},
+{urls: 'stun:stun.telxl.org:3478'},
+{urls: 'stun:stun.thebondspace.com:3478'},
+{urls: 'stun:stun.thebrassgroup.it:3478'},
+{urls: 'stun:stun.thegroovesurfers.live:3478'},
+{urls: 'stun:stun.therightguru.com:3478'},
+{urls: 'stun:stun.thinkrosystem.com:3478'},
+{urls: 'stun:stun.thorgus.com:3478'},
+{urls: 'stun:stun.threema.ch:3478'},
+{urls: 'stun:stun.thw-pbx.de:3478'},
+{urls: 'stun:stun.tianxiabuyi.com:3478'},
+{urls: 'stun:stun.tichiamo.it:3478'},
+{urls: 'stun:stun.tixeo.com:3478'},
+{urls: 'stun:stun.tng.de:3478'},
+{urls: 'stun:stun.tor.yakdigitalphone.ca:3478'},
+{urls: 'stun:stun.totalcom.info:3478'},
+{urls: 'stun:stun.touchapp.cl:3478'},
+{urls: 'stun:stun.travelplanet.click:3478'},
+{urls: 'stun:stun.tretas.org:3478'},
+{urls: 'stun:stun.tricasting.com:3478'},
+{urls: 'stun:stun.trivenet.it:3478'},
+{urls: 'stun:stun.tsi.re:3478'},
+{urls: 'stun:stun.ttmath.org:3478'},
+{urls: 'stun:stun.tula.nu:3478'},
+{urls: 'stun:stun.tutoras.global:3478'},
+{urls: 'stun:stun.twostepfileshare.com:3478'},
+{urls: 'stun:stun.twt.it:3478'},
+{urls: 'stun:stun.u5fgb.com:3478'},
+{urls: 'stun:stun.uabrides.com:3478'},
+{urls: 'stun:stun.ucanet.ru:3478'},
+{urls: 'stun:stun.uheine.com:3478'},
+{urls: 'stun:stun.ukh.de:3478'},
+{urls: 'stun:stun.uls.co.za:3478'},
+{urls: 'stun:stun.ultrino.net:3478'},
+{urls: 'stun:stun.unearth.de:3478'},
+{urls: 'stun:stun.unimatrix.link:3478'},
+{urls: 'stun:stun.unimewo.com:3478'},
+{urls: 'stun:stun.univ-grenoble-alpes.fr:3478'},
+{urls: 'stun:stun.unmute.tv:3478'},
+{urls: 'stun:stun.unotel.dk:3478'},
+{urls: 'stun:stun.uplinklabs.net:3478'},
+{urls: 'stun:stun.url.net.au:3478'},
+{urls: 'stun:stun.vadacom.co.nz:3478'},
+{urls: 'stun:stun.vahjenpartner.dnsalias.org:3478'},
+{urls: 'stun:stun.vallcom.it:3478'},
+{urls: 'stun:stun.var6.cn:3478'},
+{urls: 'stun:stun.vavadating.com:3478'},
+{urls: 'stun:stun.vc.itgen.io:3478'},
+{urls: 'stun:stun.vclass.bknix.net:3478'},
+{urls: 'stun:stun.vcomm.ca:3478'},
+{urls: 'stun:stun.venith.com:3478'},
+{urls: 'stun:stun.verbo.be:3478'},
+{urls: 'stun:stun.vesrv.eu:3478'},
+{urls: 'stun:stun.vetlab.pl:3478'},
+{urls: 'stun:stun.video.taxi:3478'},
+{urls: 'stun:stun.videosling.com:3478'},
+{urls: 'stun:stun.videovisit.io:3478'},
+{urls: 'stun:stun.vincross.com:3478'},
+{urls: 'stun:stun.virtual-aula.com:3478'},
+{urls: 'stun:stun.visselhoevede.de:3478'},
+{urls: 'stun:stun.vivell.de:3478'},
+{urls: 'stun:stun.vivox.com:3478'},
+{urls: 'stun:stun.vjoon.com:3478'},
+{urls: 'stun:stun.vo.lu:3478'},
+{urls: 'stun:stun.voiceflex.com:3478'},
+{urls: 'stun:stun.voicehost.co.uk:3478'},
+{urls: 'stun:stun.voicetech.se:3478'},
+{urls: 'stun:stun.voicetrading.com:3478'},
+{urls: 'stun:stun.voip.aebc.com:3478'},
+{urls: 'stun:stun.voip.blackberry.com:3478'},
+{urls: 'stun:stun.voip.ciphertv.com:3478'},
+{urls: 'stun:stun.voip.dyn.blackberry.net:3478'},
+{urls: 'stun:stun.voip.eutelia.it:3478'},
+{urls: 'stun:stun.voip.ovh.net:3478'},
+{urls: 'stun:stun.voipawesome.com:3478'},
+{urls: 'stun:stun.voipblast.com:3478'},
+{urls: 'stun:stun.voipbuster.com:3478'},
+{urls: 'stun:stun.voipbusterpro.com:3478'},
+{urls: 'stun:stun.voipcheap.co.uk:3478'},
+{urls: 'stun:stun.voipcheap.com:3478'},
+{urls: 'stun:stun.voipconnect.com:3478'},
+{urls: 'stun:stun.voipdiscount.com:3478'},
+{urls: 'stun:stun.voipeasy.it:3478'},
+{urls: 'stun:stun.voipfibre.com:3478'},
+{urls: 'stun:stun.voipgain.com:3478'},
+{urls: 'stun:stun.voipgate.com:3478'},
+{urls: 'stun:stun.voipgateway.cloud:3478'},
+{urls: 'stun:stun.voipgrid.nl:3478'},
+{urls: 'stun:stun.voipguru.org:3478'},
+{urls: 'stun:stun.voipia.net:3478'},
+{urls: 'stun:stun.voipinfocenter.com:3478'},
+{urls: 'stun:stun.voipoperator.tel:3478'},
+{urls: 'stun:stun.voipplanet.nl:3478'},
+{urls: 'stun:stun.voippro.com:3478'},
+{urls: 'stun:stun.voipraider.com:3478'},
+{urls: 'stun:stun.voipstreet.com:3478'},
+{urls: 'stun:stun.voipstunt.com:3478'},
+{urls: 'stun:stun.voipsvr.net:3478'},
+{urls: 'stun:stun.voipvoice.it:3478'},
+{urls: 'stun:stun.voipvox.it:3478'},
+{urls: 'stun:stun.voipwise.com:3478'},
+{urls: 'stun:stun.voipxs.nl:3478'},
+{urls: 'stun:stun.voipzoom.com:3478'},
+{urls: 'stun:stun.voismart.com:3478'},
+{urls: 'stun:stun.vomessen.de:3478'},
+{urls: 'stun:stun.voys.nl:3478'},
+{urls: 'stun:stun.vozelia.com:3478'},
+{urls: 'stun:stun.voztele.com:3478'},
+{urls: 'stun:stun.voztovoice.org:3478'},
+{urls: 'stun:stun.vrvis.at:3478'},
+{urls: 'stun:stun.vsrv1.shcwagenfeld.de:3478'},
+{urls: 'stun:stun.waterpolopalermo.it:3478'},
+{urls: 'stun:stun.wazo.io:3478'},
+{urls: 'stun:stun.wcoil.com:3478'},
+{urls: 'stun:stun.webcalldirect.com:3478'},
+{urls: 'stun:stun.webmatrix.com.br:3478'},
+{urls: 'stun:stun.webrtc.docety.com:3478'},
+{urls: 'stun:stun.webrtc.ecl.ntt.com:3478'},
+{urls: 'stun:stun.webtools.co.cr:3478'},
+{urls: 'stun:stun.weeb.fi:3478'},
+{urls: 'stun:stun.wemag.com:3478'},
+{urls: 'stun:stun.westtel.ky:3478'},
+{urls: 'stun:stun.wia.cz:3478'},
+{urls: 'stun:stun.wifirst.net:3478'},
+{urls: 'stun:stun.wlvoip.net:3478'},
+{urls: 'stun:stun.wollgast-it.de:3478'},
+{urls: 'stun:stun.worship.com.ng:3478'},
+{urls: 'stun:stun.wowitel.net:3478'},
+{urls: 'stun:stun.wtfismyip.com:3478'},
+{urls: 'stun:stun.wuliangroup.cn:3478'},
+{urls: 'stun:stun.wws.link:3478'},
+{urls: 'stun:stun.wxnz.net:3478'},
+{urls: 'stun:stun.xmpp.masgalor.de:3478'},
+{urls: 'stun:stun.xomav.com:3478'},
+{urls: 'stun:stun.xooloo-messenger.com:3478'},
+{urls: 'stun:stun.xtekserver.com:3478'},
+{urls: 'stun:stun.xten.com:3478'},
+{urls: 'stun:stun.xx-on.de:3478'},
+{urls: 'stun:stun.yacht.chat:3478'},
+{urls: 'stun:stun.yesdates.com:3478'},
+{urls: 'stun:stun.yesdok.com:3478'},
+{urls: 'stun:stun.yollacalls.com:3478'},
+{urls: 'stun:stun.yousuite.cloud:3478'},
+{urls: 'stun:stun.zadarma.com:3478'},
+{urls: 'stun:stun.zebraduck.com:3478'},
+{urls: 'stun:stun.zenbakaitz.com:3478'},
+{urls: 'stun:stun.zentauron.de:3478'},
+{urls: 'stun:stun.zepf.uni-landau.de:3478'},
+{urls: 'stun:stun.zerobudget.design:3478'},
+{urls: 'stun:stun.zoomitel.net:3478'},
+{urls: 'stun:stun.zorra.com:3478'},
+{urls: 'stun:stun.zt.gets-it.net:3478'},
+{urls: 'stun:stun.ztrig.com:3478'},
+{urls: 'stun:stun.zugschlus.de:3478'},
+{urls: 'stun:stun0-ams.voipgrid.nl:3478'},
+{urls: 'stun:stun0-grq.voipgrid.nl:3478'},
+{urls: 'stun:stun0.appello.care:3478'},
+{urls: 'stun:stun0.eigenlinks.com:3478'},
+{urls: 'stun:stun0.yoyogi.de:3478'},
+{urls: 'stun:stun00.mirz.uni-jena.de:3478'},
+{urls: 'stun:stun00.webkonferenz.net:3478'},
+{urls: 'stun:stun001.yesdok.com:3478'},
+{urls: 'stun:stun01.ash-netconsult.de:3478'},
+{urls: 'stun:stun01.bz-sh.de:3478'},
+{urls: 'stun:stun01.cvvb.net:3478'},
+{urls: 'stun:stun01.lith.dls.net:3478'},
+{urls: 'stun:stun01.live.sipgate.net:3478'},
+{urls: 'stun:stun01.livesale.cz:3478'},
+{urls: 'stun:stun01.mconf.rnp.br:3478'},
+{urls: 'stun:stun01.nfon.net:3478'},
+{urls: 'stun:stun01.pegasusserver.de:3478'},
+{urls: 'stun:stun01.silentcircle.net:3478'},
+{urls: 'stun:stun01.umy.ac.id:3478'},
+{urls: 'stun:stun01.vsee.com:3478'},
+{urls: 'stun:stun02-node01.live.sipgate.net:3478'},
+{urls: 'stun:stun02-node03.live.sipgate.net:3478'},
+{urls: 'stun:stun02-node04.live.sipgate.net:3478'},
+{urls: 'stun:stun02.counsol.net:3478'},
+{urls: 'stun:stun02.live.sipgate.net:3478'},
+{urls: 'stun:stun02.mconf.rnp.br:3478'},
+{urls: 'stun:stun02.nfon.net:3478'},
+{urls: 'stun:stun02.senfcall.de:3478'},
+{urls: 'stun:stun02.silentcircle.net:3478'},
+{urls: 'stun:stun02.umy.ac.id:3478'},
+{urls: 'stun:stun02.unifiedring.co.uk:3478'},
+{urls: 'stun:stun02.vsee.com:3478'},
+{urls: 'stun:stun1-ams.voipgrid.nl:3478'},
+{urls: 'stun:stun1-grq.voipgrid.nl:3478'},
+{urls: 'stun:stun1.1telecom.ru:3478'},
+{urls: 'stun:stun1.a3bcproxy.nl:3478'},
+{urls: 'stun:stun1.alphacron.de:3478'},
+{urls: 'stun:stun1.anc.ffm.hfosip.de:3478'},
+{urls: 'stun:stun1.appello.care:3478'},
+{urls: 'stun:stun1.apse1.qa3.xhoot.com:3478'},
+{urls: 'stun:stun1.backend.doc-cirrus.com:3478'},
+{urls: 'stun:stun1.bancaditalia.it:3478'},
+{urls: 'stun:stun1.celya.fr:3478'},
+{urls: 'stun:stun1.crossmarx.nl:3478'},
+{urls: 'stun:stun1.dimorf.com:3478'},
+{urls: 'stun:stun1.doc-cirrus.com:3478'},
+{urls: 'stun:stun1.edagram.com:3478'},
+{urls: 'stun:stun1.egap.xunta.gal:3478'},
+{urls: 'stun:stun1.estpak.ee:3478'},
+{urls: 'stun:stun1.euc1.dev1.xhoot.com:3478'},
+{urls: 'stun:stun1.euc1.qa3.xhoot.com:3478'},
+{urls: 'stun:stun1.fra3.ffm.hfosip.de:3478'},
+{urls: 'stun:stun1.haluska.dev:3478'},
+{urls: 'stun:stun1.hfosip.de:3478'},
+{urls: 'stun:stun1.hoolva.com:3478'},
+{urls: 'stun:stun1.ims.telenor.no:3478'},
+{urls: 'stun:stun1.imstest.telenor.no:3478'},
+{urls: 'stun:stun1.keytrust.com.au:3478'},
+{urls: 'stun:stun1.l.google.com:19302'},
+{urls: 'stun:stun1.l.google.com:19305'},
+{urls: 'stun:stun1.l.google.com:3478'},
+{urls: 'stun:stun1.mcra.fr:3478'},
+{urls: 'stun:stun1.mdcc-net.de:3478'},
+{urls: 'stun:stun1.meetby.io:3478'},
+{urls: 'stun:stun1.megatel.si:3478'},
+{urls: 'stun:stun1.mk.de:3478'},
+{urls: 'stun:stun1.mpi-magdeburg.mpg.de:3478'},
+{urls: 'stun:stun1.mydisk.nsc.ru:3478'},
+{urls: 'stun:stun1.net.ipl.pt:3478'},
+{urls: 'stun:stun1.oren.cloud:3478'},
+{urls: 'stun:stun1.pocos.nl:3478'},
+{urls: 'stun:stun1.silvercat.in:3478'},
+{urls: 'stun:stun1.sipport.de:3478'},
+{urls: 'stun:stun1.softcontrol.cz:3478'},
+{urls: 'stun:stun1.starman.ee:3478'},
+{urls: 'stun:stun1.swnnms.net:3478'},
+{urls: 'stun:stun1.use1.dev1.xhoot.com:3478'},
+{urls: 'stun:stun1.use1.dev2.xhoot.com:3478'},
+{urls: 'stun:stun1.use1.dev3.xhoot.com:3478'},
+{urls: 'stun:stun1.use1.qa2.xhoot.com:3478'},
+{urls: 'stun:stun1.use1.qa3.xhoot.com:3478'},
+{urls: 'stun:stun1.vodaway.ru:3478'},
+{urls: 'stun:stun1.webweaver.de:3478'},
+{urls: 'stun:stun10.onewebtalk.de:3478'},
+{urls: 'stun:stun1a.anc.ffm.hfosip.de:3478'},
+{urls: 'stun:stun1a.fra3.ffm.hfosip.de:3478'},
+{urls: 'stun:stun1a.frontlinebackoffice.ca:3478'},
+{urls: 'stun:stun1a.novuscom.net:3478'},
+{urls: 'stun:stun1b.frontlinebackoffice.ca:3478'},
+{urls: 'stun:stun1b.novuscom.net:3478'},
+{urls: 'stun:stun2.1-voip.com:3478'},
+{urls: 'stun:stun2.1ats.ru:3478'},
+{urls: 'stun:stun2.a3bcproxy.nl:3478'},
+{urls: 'stun:stun2.appello.care:3478'},
+{urls: 'stun:stun2.backend.doc-cirrus.com:3478'},
+{urls: 'stun:stun2.bancaditalia.it:3478'},
+{urls: 'stun:stun2.belowtoxic.cloud:3478'},
+{urls: 'stun:stun2.call.netplanet.at:3478'},
+{urls: 'stun:stun2.chatrhub.com:3478'},
+{urls: 'stun:stun2.connecteddata.com:3478'},
+{urls: 'stun:stun2.doc-cirrus.com:3478'},
+{urls: 'stun:stun2.egap.xunta.gal:3478'},
+{urls: 'stun:stun2.fon.is:3478'},
+{urls: 'stun:stun2.free-solutions.org:3478'},
+{urls: 'stun:stun2.hoolva.com:3478'},
+{urls: 'stun:stun2.ims.telenor.no:3478'},
+{urls: 'stun:stun2.imstest.telenor.no:3478'},
+{urls: 'stun:stun2.informatica95.net:3478'},
+{urls: 'stun:stun2.kynaforkids.vn:3478'},
+{urls: 'stun:stun2.l.google.com:19302'},
+{urls: 'stun:stun2.l.google.com:19305'},
+{urls: 'stun:stun2.meowsbox.com:3478'},
+{urls: 'stun:stun2.mik.ua:3478'},
+{urls: 'stun:stun2.mk.de:3478'},
+{urls: 'stun:stun2.net.ipl.pt:3478'},
+{urls: 'stun:stun2.pylo.net:3478'},
+{urls: 'stun:stun2.rz.htw-berlin.de:3478'},
+{urls: 'stun:stun2.server.uni-frankfurt.de:3478'},
+{urls: 'stun:stun2.sipport.de:3478'},
+{urls: 'stun:stun2.squaretalk.com:3478'},
+{urls: 'stun:stun2.ssystems.de:3478'},
+{urls: 'stun:stun2.starman.ee:3478'},
+{urls: 'stun:stun2.teletek.se:3478'},
+{urls: 'stun:stun2.videovisit.io:3478'},
+{urls: 'stun:stun2.wollgast-it.de:3478'},
+{urls: 'stun:stun2.zoomitel.net:3478'},
+{urls: 'stun:stun2a.frontlinebackoffice.ca:3478'},
+{urls: 'stun:stun2a.novuscom.net:3478'},
+{urls: 'stun:stun2a.southislandcable.com:3478'},
+{urls: 'stun:stun2b.frontlinebackoffice.ca:3478'},
+{urls: 'stun:stun2b.novuscom.net:3478'},
+{urls: 'stun:stun2b.southislandcable.com:3478'},
+{urls: 'stun:stun2reply.connecteddata.com:3478'},
+{urls: 'stun:stun3.hoolva.com:3478'},
+{urls: 'stun:stun3.l.google.com:19302'},
+{urls: 'stun:stun3.l.google.com:19305'},
+{urls: 'stun:stun4.beeznest.com:3478'},
+{urls: 'stun:stun4.hoolva.com:3478'},
+{urls: 'stun:stun4.l.google.com:19302'},
+{urls: 'stun:stun4.l.google.com:19305'},
+{urls: 'stun:stun4.l.google.com:3478'},
+{urls: 'stun:stun5.connecteddata.com:3478'},
+{urls: 'stun:stun5reply.connecteddata.com:3478'},
+{urls: 'stun:stun6.connecteddata.com:3478'},
+{urls: 'stun:stun6reply.connecteddata.com:3478'},
+{urls: 'stun:stuna.wxnz.net:3478'},
+{urls: 'stun:stunb.wxnz.net:3478'},
+{urls: 'stun:stunbb.mirhosting.com:3478'},
+{urls: 'stun:stunc.cloud.trizwo.it:3478'},
+{urls: 'stun:stund.yeastar.com:3478'},
+{urls: 'stun:stundenplan.mafiasi.de:3478'},
+{urls: 'stun:stundev-aws-secondary.rd01.konami.net:3478'},
+{urls: 'stun:stundev-aws-tertiary.rd01.konami.net:3478'},
+{urls: 'stun:stundev.livextend.cloud:3478'},
+{urls: 'stun:stunrc.ruijienetworks.com:3478'},
+{urls: 'stun:stunreply.connecteddata.com:3478'},
+{urls: 'stun:stuns.ipv8.pl:3478'},
+{urls: 'stun:stuns.nowe-tmg.de:3478'},
+{urls: 'stun:stuns.ztrig.com:3478'},
+{urls: 'stun:stunsec.provtel.com:3478'},
+{urls: 'stun:stunserver-if2.wx3.se:3478'},
+{urls: 'stun:stunserver.wx3.se:3478'},
+{urls: 'stun:stunsvr-as.ruijienetworks.com:3478'},
+{urls: 'stun:stunturn-se.easymeeting.net:3478'},
+{urls: 'stun:stunturn.csproject.org:3478'},
+{urls: 'stun:stunturn.sibtel.gv.at:3478'},
+{urls: 'stun:stunturn.yellka.com:3478'},
+{urls: 'stun:stunturn4.triart.jp:3478'},
+{urls: 'stun:stunv4.labs.lacnic.net:3478'},
+{urls: 'stun:stunvid.likenuuk.com:3478'},
+{urls: 'stun:stunx.externet.hu:3478'},
+{urls: 'stun:stunx.novuscom.net:3478'},
+{urls: 'stun:stuny.externet.hu:3478'},
+{urls: 'stun:stuny.megafone.hu:3478'}
+              ]
+       }
+
+       async  function createConnection(connId)
+       {  
+         
+          var connection= new RTCPeerConnection(iceConfig);
+         
+           connection.onicecandidate = function(event){
+              if(event.candidate){
+                  
+                  sdpFunction(JSON.stringify({
+                    'iceCandidate':event.candidate
+                  }), connId)
+              }
+           }
+
+           // for offer
+           connection.onnegotiationneeded = async function(event){
+            await createOffer(connId); //pending method
+            
+           }
+           
+           
+           //for audio and video track
+           connection.ontrack = function(event){
+               // console.log("ontrack",event);
+                if(!remoteStream[connId]){
+                    remoteStream[connId] = new MediaStream();
+                }
+                if(!audioStream[connId]){
+                    audioStream[connId] = new MediaStream();
+                }
+                if(event.track.kind == 'video'){
+                    remoteStream[connId].getTracks().forEach(t => remoteStream[connId].removeTrack(t));
+                    remoteStream[connId].addTrack(event.track); 
+
+                    var remoteVideoDiv = document.getElementById('video_'+connId);
+                    remoteVideoDiv.srcObject = null;
+                    remoteVideoDiv.srcObject = remoteStream[connId];
+                    remoteVideoDiv.load();
+                }
+                else if(event.track.kind == 'audio'){
+                    audioStream[connId].getTracks().forEach(t => audioStream[connId].removeTrack(t));
+                    audioStream[connId].addTrack(event.track); 
+
+                    var remoteAudioDiv = document.getElementById('audio_'+connId);
+                    remoteAudioDiv.srcObject = null;
+                    remoteAudioDiv.srcObject = audioStream[connId];
+                    remoteAudioDiv.load();
+                }
+           }
+
+           users_connectionID[connId] = connId;
+           users_connection[connId] = connection;
+           updateMediaSenders(mediaTrack, rtpVideoSenders);
+           
+           return connection;
+
+       }
+
+       var audioTrack;
+       var videoTrack;
+    
+       async function createOffer(connid){
+              var connection  = users_connection[connid];
+              var offer =await connection.createOffer();
+              await connection.setLocalDescription(offer);
+
+              sdpFunction(JSON.stringify({
+                'offer': connection.localDescription
+              }),connid);
+       }
+       
+       socket.on('sdpProcess', async function(data){
+         await sdpProcess(data.message, data.from_connid)
+
+       });
+       
+
+       async function processMedia(){
+             try{
+                var vStream = null;
+                var aStream= null;
+
+                vStream = await navigator.mediaDevices.getUserMedia({
+                   video:{
+                    width: 720,
+                    height: 480
+                   },
+                   audio:false
+                });
+                aStream = await navigator.mediaDevices.getUserMedia({
+                   video:false,
+                   audio:true
+                });
+                
+                audioTrack = aStream.getAudioTracks()[0];
+                audioTrack.enable=true;
+
+                updateMediaSenders(audioTrack, rtpAudioSenders);
+
+                //video track
+                mediaTrack = vStream.getVideoTracks()[0];
+                
+                localUserVideo.srcObject = new MediaStream([mediaTrack]);
+               // console.log("mediaTrack",localUserVideo.srcObject);
+                updateMediaSenders(mediaTrack, rtpVideoSenders);
+
+
+             }
+             catch(err){
+                console.log("processMedia",err);
+             }
+
+        }
+        async function sdpProcess(message, from_connid){
+           message= JSON.parse(message);
+           if(message.answer){
+            await users_connection[from_connid].setRemoteDescription(new RTCSessionDescription(message.answer));
+           }
+           else if(message.offer){
+                if(!users_connection[from_connid]){
+                    await createConnection(from_connid);
+                }
+               await  users_connection[from_connid].setRemoteDescription(new RTCSessionDescription(message.offer));
+               var answer = await users_connection[from_connid].createAnswer();
+
+               await users_connection[from_connid].setLocalDescription(answer);
+
+               sdpFunction(JSON.stringify({
+                'answer': answer,
+               }), from_connid);
+
+           }
+           else if(message.iceCandidate){
+            if(!users_connection[from_connid]){
+                await createConnection(from_connid);
+            }
+            try{
+                await users_connection[from_connid].addIceCandidate(message.iceCandidate);
+            }
+            catch(error){
+                console.log("iceCandidate",error);
+            }
+            
+           }
+        }
+
+        socket.on('closedConnectionInfo', function(connId){
+            $('#' + connId).remove();
+            users_connection[connId].close();
+            users_connection[connId] = null;
+            users_connectionID[connId] = null;
+            
+            if(remoteStream[connId]){
+                remoteStream[connId].getTracks().forEach(t =>{
+                    t.stop();
+                });
+                remoteStream[connId] = null;
+                
+            }
+        })
+
+
+    </script>
+
+
+</body>
+
+</html>
